@@ -1,0 +1,53 @@
+---
+- name: Dynamic config update per host based on IP
+  hosts: all
+  gather_facts: false
+
+  vars:
+    config_path: "/tmp/config.yml"
+    all_config_updates: {}
+
+  tasks:
+    - name: Get host IP
+      set_fact:
+        this_ip: "{{ ansible_host }}"
+
+    - name: Extract host-specific config updates
+      set_fact:
+        config_updates: "{{ all_config_updates.get(this_ip, {}) }}"
+
+    - name: Debug updates
+      debug:
+        var: config_updates
+      when: config_updates != {}
+
+    - name: Check if config file exists
+      ansible.builtin.stat:
+        path: "{{ config_path }}"
+      register: config_file
+
+    - name: Create empty config if missing
+      ansible.builtin.file:
+        path: "{{ config_path }}"
+        state: touch
+      when: not config_file.stat.exists
+
+    - name: Read existing config
+      ansible.builtin.slurp:
+        src: "{{ config_path }}"
+      register: config_content
+
+    - name: Parse config
+      ansible.builtin.set_fact:
+        current_config: "{{ (config_content.content | b64decode) | from_yaml | default({}, true) }}"
+
+    - name: Merge updates
+      ansible.builtin.set_fact:
+        updated_config: "{{ current_config | combine(config_updates, recursive=true) }}"
+      when: config_updates != {}
+
+    - name: Save updated config
+      ansible.builtin.copy:
+        dest: "{{ config_path }}"
+        content: "{{ updated_config | to_nice_yaml }}"
+      when: config_updates != {}
