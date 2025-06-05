@@ -1,6 +1,6 @@
 ---
 - name: Dynamic config update per host based on IP
-  hosts: all
+  hosts: Pi
   gather_facts: false
 
   vars:
